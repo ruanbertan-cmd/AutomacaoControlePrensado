@@ -1,6 +1,7 @@
 import pandas as pd
 import os
 from datetime import datetime
+import re
 
 # =============================================================================
 # FUNÇÃO PARA LIMPAR CÓDIGOS
@@ -23,8 +24,8 @@ def limpar_codigo(df, colunas):
 # 1) IMPORTAÇÃO DAS BASES
 # =============================================================================
 df1 = pd.read_csv(r'X:\transf\LISTATOT_ep010r_ITENS.csv', sep=';', encoding='latin1', low_memory=False)
-df2 = pd.read_csv(r'C:\Users\e145905\Desktop\Pessoal\ruanbertan-cmd\revisaoItensPrensados\basesItens(Clone&Fundo)\ep270re14590557339.csv', sep=';', encoding='latin1', low_memory=False)
-df3 = pd.read_csv(r'C:\Users\e145905\Desktop\Pessoal\ruanbertan-cmd\revisaoItensPrensados\basesItens(Clone&Fundo)\ep235r48652.csv', sep=';', encoding='latin1', low_memory=False)
+df2 = pd.read_csv(r'C:\Users\e145905\Desktop\Pessoal\ruanbertan-cmd\revisaoItensPrensados\basesItens(Clone&Fundo)\ep270re14590538863.csv', sep=';', encoding='latin1', low_memory=False)
+df3 = pd.read_csv(r'C:\Users\e145905\Desktop\Pessoal\ruanbertan-cmd\revisaoItensPrensados\basesItens(Clone&Fundo)\ep235r38896.csv', sep=';', encoding='latin1', low_memory=False)
 
 # =============================================================================
 # 2) PADRONIZAÇÃO DE CÓDIGOS
@@ -79,6 +80,7 @@ df4["Dimensao"]              = df1["Dimensao"].astype(str)
 df4["Nome Mae"]              = df1["Nome Mae"].astype(str)
 df4["Acabamento Superficie"] = df1["Acabamento Superficie"].astype(str)
 df4["Unidade Pai"]           = df1["Unidade Pai"].astype(str)
+df4["Polo"]                  = df1["Polo"].astype(str)
 
 # =============================================================================
 # juntar dados de fundo (merge)
@@ -119,6 +121,28 @@ def get_row(code):
     return result[0] if len(result) else None
 
 # =============================================================================
+# AUXILIAR: validacao apenas por Polo
+
+def filtrar_mesmo_polo(codigos, polo_original):
+    """
+    Retorna apenas códigos existentes no df4
+    e que possuem o mesmo polo do item original.
+    """
+    if not codigos or not isinstance(codigos, (list, tuple)):
+        return []
+
+    filtrados = []
+    for cod in codigos:
+        idx = get_row(cod)
+        if idx is None:
+            continue
+        if df4.at[idx, "Polo"] == polo_original:
+            filtrados.append(cod)
+    return filtrados
+
+# =============================================================================
+
+# =============================================================================
 # FUNÇÃO PRINCIPAL: processar grupo (original + clones + opcional fundo)
 #    — respeita itens já validados (não sobrescreve)
 # =============================================================================
@@ -128,6 +152,15 @@ def processar_grupo(codigos):
     define quem será Prensado = Sim (menor código LB).
     Itens com Validado == True são ignorados.
     """
+    if not codigos:
+        return
+
+    idx_ref = get_row(codigos[0])
+    if idx_ref is None:
+        return
+
+    polo_ref = df4.at[idx_ref, "Polo"]
+    codigos = filtrar_mesmo_polo(codigos, polo_ref)
     # limpar entradas inválidas
     codigos = [c for c in codigos if pd.notna(c) and str(c) != "nan"]
 
@@ -241,12 +274,16 @@ for nome, grupo in df_sc3.groupby("Nome Mae"):
         df4.at[idx_menor, "Validado"] = True
 
     # fundo do menor
+    polo_ref = df4.at[idx_menor, "Polo"]
     fundo_menor = df4.at[idx_menor, "Item Fundo"]
+
     if pd.notna(fundo_menor):
-        fidx = get_row(fundo_menor)
-        if fidx is not None and not df4.at[fidx, "Validado"]:
-            df4.at[fidx, "PrensadoRevisado"] = "Nao"
-            df4.at[fidx, "Validado"] = True
+        f = filtrar_mesmo_polo([fundo_menor], polo_ref)
+        if f:
+            fidx = get_row(f[0])
+            if fidx is not None and not df4.at[fidx, "Validado"]:
+                df4.at[fidx, "PrensadoRevisado"] = "Nao"
+                df4.at[fidx, "Validado"] = True
 
     # clones do menor
     for clone in df4.at[idx_menor, "ClonesLista"]:
@@ -257,12 +294,16 @@ for nome, grupo in df_sc3.groupby("Nome Mae"):
 
     # --- preparar e processar apenas o grupo relativo ao 60x120 ---
     cod_maior = df4.at[idx_maior, "CodigoOriginal"]
-    grupo_maior = [cod_maior] + df4.at[idx_maior, "ClonesLista"]
+    polo_ref = df4.at[idx_maior, "Polo"]
+    clones_validos = filtrar_mesmo_polo(df4.at[idx_maior, "ClonesLista"], polo_ref)
+    grupo_maior = [cod_maior] + clones_validos
 
     fundo_maior = df4.at[idx_maior, "Item Fundo"]
     # incluir o fundo do maior apenas se existir (processar_grupo ignora já validados)
     if pd.notna(fundo_maior):
-        grupo_maior.append(fundo_maior)
+        f = filtrar_mesmo_polo([fundo_maior], polo_ref)
+        if f:
+            grupo_maior.append(f[0])
 
     # processar grupo (processar_grupo respeita Validado==True)
     processar_grupo(grupo_maior)
@@ -296,6 +337,9 @@ df_sc4 = df4[
     (df4["UnidadePaiNorm"].str.contains("SC4", na=False))
 ].copy()
 
+# garantir separação por polo
+df_sc4["Polo"] = df_sc4["Polo"].astype(str)
+
 
 # Revisando campo Nome Mae para nao ter acabamento
 df_sc4["Nome Mae"] = (
@@ -311,7 +355,10 @@ df_sc4["Nome Mae"] = (
 )
 
 # Agrupar por Nome Mae + Dimensão
-for (nome_mae, dimensao), grupo in df_sc4.groupby(["Nome Mae", "DimensaoNorm"]):
+for (polo, nome_mae, dimensao), grupo in df_sc4.groupby(
+    ["Polo", "Nome Mae", "DimensaoNorm"]
+):
+
 
     acabamentos = set(grupo["AcabamentoNorm"].unique())
 
@@ -402,74 +449,53 @@ df4.loc[mask_desc, ["PrensadoRevisado", "Validado"]] = ["Nao", True]
 
 # =============================================================================
 # 9) REGRA FINAL (TRIPLA CHECAGEM)
-#    — iterar apenas sobre linhas que ainda não foram validadas e que são LB
 # =============================================================================
-for idx, row in df4[(df4["Validado"] == False) & (df4["SituacaoOriginal"].astype(str).str.upper().str.strip() == "LB")].iterrows():
+for idx, row in df4[
+    (df4["Validado"] == False) &
+    (df4["SituacaoOriginal"].astype(str).str.upper().str.strip() == "LB")
+].iterrows():
+
     original = row["CodigoOriginal"]
-    fundo    = row["Item Fundo"]
-    clones   = row["ClonesLista"]
+    polo_original = df4.at[idx, "Polo"]
+
+    clones = filtrar_mesmo_polo(row["ClonesLista"], polo_original)
+
+    fundo = None
+    if pd.notna(row["Item Fundo"]):
+        fundo_f = filtrar_mesmo_polo([row["Item Fundo"]], polo_original)
+        fundo = fundo_f[0] if fundo_f else None
+
     tipo_fundo = row["SituacaoFundo"]
 
     # Caso A — TEM FUNDO E FUNDO É LB
-    if pd.notna(fundo) and str(tipo_fundo).strip().upper() == "LB":
+    if fundo and str(tipo_fundo).strip().upper() == "LB":
 
         fund_idx = get_row(fundo)
         orig_idx = get_row(original)
 
-        # Fundo = SIM
         if fund_idx is not None and not df4.at[fund_idx, "Validado"]:
             df4.at[fund_idx, "PrensadoRevisado"] = "Sim"
             df4.at[fund_idx, "Validado"] = True
 
-        # Original = NÃO
         if orig_idx is not None and not df4.at[orig_idx, "Validado"]:
             df4.at[orig_idx, "PrensadoRevisado"] = "Nao"
             df4.at[orig_idx, "Validado"] = True
 
-        # Clones do original = NÃO
         for clone in clones:
             cidx = get_row(clone)
             if cidx is not None and not df4.at[cidx, "Validado"]:
                 df4.at[cidx, "PrensadoRevisado"] = "Nao"
                 df4.at[cidx, "Validado"] = True
-
-        continue
-
-
-    # Caso D — não tem clones
-    if len(clones) == 0 and pd.notna(fundo):
-        orig_idx = get_row(original)
-        fund_idx = get_row(fundo)
-
-        if fund_idx is None or orig_idx is None:
-            continue
-
-        if str(tipo_fundo).strip().upper() == "LB":  # fundo ganha
-            if not df4.at[fund_idx, "Validado"]:
-                df4.at[fund_idx, "PrensadoRevisado"] = "Sim"
-                df4.at[fund_idx, "Validado"] = True
-            if not df4.at[orig_idx, "Validado"]:
-                df4.at[orig_idx, "PrensadoRevisado"] = "Nao"
-                df4.at[orig_idx, "Validado"] = True
-        else:  # original ganha
-            if not df4.at[orig_idx, "Validado"]:
-                df4.at[orig_idx, "PrensadoRevisado"] = "Sim"
-                df4.at[orig_idx, "Validado"] = True
-            if not df4.at[fund_idx, "Validado"]:
-                df4.at[fund_idx, "PrensadoRevisado"] = "Nao"
-                df4.at[fund_idx, "Validado"] = True
         continue
 
     # Caso B — fundo existe e não é LB
-    if pd.notna(fundo) and (str(tipo_fundo).strip().upper() != "LB"):
-        processar_grupo([original] + clones + [fundo])
+    if fundo:
+        grupo = [original] + clones + [fundo]
+        processar_grupo(grupo)
         continue
 
     # Caso C — sem fundo
-    if pd.isna(fundo):
-        processar_grupo([original] + clones)
-        continue
-
+    processar_grupo([original] + clones)
 
 
 # =============================================================================
