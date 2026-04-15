@@ -24,8 +24,8 @@ def limpar_codigo(df, colunas):
 # 1) IMPORTAÇÃO DAS BASES
 # =============================================================================
 df1 = pd.read_csv(r'X:\transf\LISTATOT_ep010r_ITENS.csv', sep=';', encoding='latin1', low_memory=False)
-df2 = pd.read_csv(r'C:\Users\e145905\Desktop\Pessoal\ruanbertan-cmd\revisaoItensPrensados\basesItens(Clone&Fundo)\ep270re14590538863.csv', sep=';', encoding='latin1', low_memory=False)
-df3 = pd.read_csv(r'C:\Users\e145905\Desktop\Pessoal\ruanbertan-cmd\revisaoItensPrensados\basesItens(Clone&Fundo)\ep235r38896.csv', sep=';', encoding='latin1', low_memory=False)
+df2 = pd.read_csv(r'C:\Users\e145905\OneDrive - Mohawk Industries\Desktop\Pessoal\ruanbertan-cmd\revisaoItensPrensados\basesItens(Clone&Fundo)\ep270re14590555462.csv', sep=';', encoding='latin1', low_memory=False)
+df3 = pd.read_csv(r'C:\Users\e145905\OneDrive - Mohawk Industries\Desktop\Pessoal\ruanbertan-cmd\revisaoItensPrensados\basesItens(Clone&Fundo)\ep235r55480.csv', sep=';', encoding='latin1', low_memory=False)
 
 # =============================================================================
 # 2) PADRONIZAÇÃO DE CÓDIGOS
@@ -420,7 +420,7 @@ mask_tip = (
 df4.loc[mask_tip, ["PrensadoRevisado", "Validado"]] = ["Nao", True]
 
 # Unidade Pai inválida -> NÃO
-uniPai_validos = ["SC 1", "SC 2", "SC 3", "SC 4", "SC 5", "ART. I - SC", "BA 1", "PB 1", "SC IND OUT"]
+uniPai_validos = ["SC 1", "SC 2", "SC 3", "SC 4", "SC 5", "ART. I - SC", "BA 1", "PB 1"]
 mask_pai = (
     (df4["Validado"] == False) &
     (~df4["Unidade Pai"].astype(str).str.upper().isin(uniPai_validos))
