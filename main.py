@@ -444,16 +444,44 @@ mask_desc = (
 
 df4.loc[mask_desc, ["PrensadoRevisado", "Validado"]] = ["Nao", True]
 
+# Regra absoluta: itens produzidos em unidades CD nunca são prensados.
+# Não depende de Validado para impedir qualquer regra posterior de alterá-los.
+unidades_cd = [
+    "CD BA 1", "CD SC-I MI", "CD SP", "CD SC-IV MI", "CD SC-IV ME",
+    "CD SP-II MI(GB)", "CD SP -I MI(BT)", "CD SP-II ME(GB)",
+    "CD SP-I ME(BT)", "CD SC-I ME", "CD SC-II MI(DL)",
+    "CD SC-II ME(DL)", "CD REVDB-SP", "CD SC3", "CD SC 5", "CD PB2",
+    "CD PB1",
+]
+mask_cd = df4["Unidade Pai"].astype(str).str.strip().str.upper().isin(unidades_cd)
+df4.loc[mask_cd, ["PrensadoRevisado", "Validado"]] = ["Nao", True]
+
 # Nota: todas as regras acima definem Validado=True para bloquear reescrita posterior.
 
 
 # =============================================================================
 # 9) REGRA FINAL (TRIPLA CHECAGEM)
 # =============================================================================
-for idx, row in df4[
+# Inclui as bases não-LB que têm clones, mesmo já validadas como "Nao" pela
+# regra imutável. Elas precisam participar para classificar seus clones LB.
+# A ordenação garante que essas bases sejam tratadas antes dos LB pendentes.
+mask_base_nao_lb_com_clone = (
+    (df4["SituacaoOriginal"].astype(str).str.upper().str.strip() != "LB") &
+    (df4["ClonesLista"].apply(len) > 0)
+)
+mask_lb_pendente = (
     (df4["Validado"] == False) &
     (df4["SituacaoOriginal"].astype(str).str.upper().str.strip() == "LB")
-].iterrows():
+)
+
+itens_tripla_checagem = df4[
+    mask_base_nao_lb_com_clone | mask_lb_pendente
+].copy()
+itens_tripla_checagem["PrioridadeTripla"] = (
+    itens_tripla_checagem["SituacaoOriginal"].astype(str).str.upper().str.strip() == "LB"
+)
+
+for idx, row in itens_tripla_checagem.sort_values("PrioridadeTripla").iterrows():
 
     original = row["CodigoOriginal"]
     polo_original = df4.at[idx, "Polo"]
